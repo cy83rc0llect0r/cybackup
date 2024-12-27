@@ -21,14 +21,16 @@ class Backup:
         self.conn.close()
 
     def postgres(self, databases, backup_dir):
-        conn = psycopg2.connect(
-            host=self.host,
-            port=self.port,
-            user=self.user,
-            password=self.password
-        )
-        self._backup_postgres_databases(databases, backup_dir, conn)
-        conn.close()
+        conn={}
+        for db in databases:
+            conn[db] = psycopg2.connect(
+                host=self.host,
+                port=self.port,
+                user=self.user,
+                password=self.password,
+                dbname=db
+            )
+        self._backup_postgres_databases(backup_dir, conn)
 
     def mongodb(self, databases, backup_dir):
         user=self.user
@@ -58,39 +60,39 @@ class Backup:
                 with open(backup_file, "a") as f:
                     f.write(insert_query)
 
-    def _backup_postgres_databases(self, databases, backup_dir, conn):
-        cursor = conn.cursor()
-        for db in databases:
+    def _backup_postgres_databases(self, backup_dir, conn):
+        for c in conn.values():
+            db = (list(conn.keys()))[list(conn.values()).index(c)]
+            cursor = c.cursor()
             backup_file = os.path.join(backup_dir, f"{db}.sql")
-
             cursor.execute(f"SELECT datname FROM pg_database WHERE datname = '{db}'")
             if cursor.rowcount == 0:
                 print(f"Database '{db}' does not exist.")
                 continue
-
-            cursor.execute("SET search_path TO " + db)
-
+#            cursor.execute("SET search_path TO public")
             cursor.execute("""
-                SELECT table_name FROM information_schema.tables
-                WHERE table_schema='public'
-                ORDER BY table_type, table_name
+            SELECT tablename, tableowner, tablespace FROM pg_tables
+            WHERE schemaname='public'
+            ORDER BY tablename
             """)
-            table_list = [row[0] for row in cursor.fetchall()]
+            table_list = cursor.fetchall()
 
             with open(backup_file, "w") as f:
                 f.write(f"-- PostgreSQL dump from {db}\n\n")
-
                 for table in table_list:
-                    create_table_query = f"SELECT format('%s', tablename, tableowner, tablespace, tabletype, '', reloptions, array_agg(relacl)) FROM pg_tables WHERE tablename = '{table}';"
+                    tablename, tableowner, tablespace = table
+                    create_table_query = f"SELECT format('%s', '{tablename}', '{tableowner}', '{tablespace}')"
+                   # create_table_query = f"SELECT format('%s', tablename, tableowner, tablespace, tabletype, '', reloptions, array_agg(relacl)) FROM pg_tables WHERE tablename = '{table}';"
                     cursor.execute(create_table_query)
                     row = cursor.fetchone()
                     f.write(f"{row[0]};\n\n")
 
-                    select_query = f"SELECT * FROM {table}"
+                    select_query = f"SELECT * FROM {tablename}"
                     cursor.execute(select_query)
                     rows = cursor.fetchall()
                     for row in rows:
                         f.write(f"INSERT INTO {table} VALUES {row};\n")
+            c.close()
 
     def _backup_mongodb_databases(self, databases, backup_dir, conn):
         for db_name in databases:
