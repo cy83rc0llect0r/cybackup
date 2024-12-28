@@ -2,6 +2,8 @@ import psycopg2
 import mysql.connector
 import os
 import pymongo
+import json
+from bson import json_util
 
 class Backup:
     def __init__(self, host, port = 3306, user, password):
@@ -104,7 +106,7 @@ class Backup:
                 for collection in collections:
                     collection_data = db[collection].find()
                     for document in collection_data:
-                        document_json = json.dumps(document).encode('utf-8')
+                        document_json = json_util.dumps(document).encode('utf-8')
                         outfile.write(document_json)
                         outfile.write(b'\n')
                         print(f"Backing up {db_name}.{collection}")
