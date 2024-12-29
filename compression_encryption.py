@@ -12,7 +12,7 @@ class CompressionEncryption:
         self.algorithm = algorithm
         self.gpg = gnupg.GPG()
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        if os.path.dirname(output_path):
+        if not os.path.exists(output_path):
             os.makedirs(output_path)
         self.compressed_path = os.path.join(output_path, f'{os.path.basename(self.output_path)}_{timestamp}.tar.{algorithm}')
         self.encrypted_path = os.path.join(output_path, f'{os.path.basename(self.output_path)}_{timestamp}.tar.{algorithm}.gpg')
@@ -29,11 +29,10 @@ class CompressionEncryption:
             print(f'Compressed file created at {self.compressed_path}.')
 
     def encrypt(self):
-        with open(self.compressed_path, 'rb') as f:
-            status = self.gpg.encrypt(f, symmetric=True, passphrase=self.password, output=self.encrypted_path, encrypt=False)
-            if status.ok:
-                print(f'Encrypted file created at {self.encrypted_path}.')
-            else:
-                print(f'Error creating encrypted file: encrypted_data.status')
+        status = self.gpg.encrypt_file(self.compressed_path, recipients=None, symmetric=True, passphrase=self.password, output=self.encrypted_path) 
+        if not status.ok:
+            print(f"Encryption failed: {status.stderr}")
+        else:
+            print(f"Encrypted file created at {self.encrypted_path}.")
 
         os.remove(self.compressed_path)
